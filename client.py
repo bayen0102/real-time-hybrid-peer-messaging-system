@@ -131,7 +131,7 @@ def parse_message(raw: str):
 #11 state==chat 這裡是peer<->peer chat : persistent tcp代表只開一個連接
 #這裡是為了能讓peer之間可以互相聊天，使用select來同時監聽標準輸入和socket，實現非阻塞的聊天功能。
 #目標：同时监听：用戶輸入和peer消息
-# Bob(initiator) write first, Alice(acceptor) read first
+# initiator write first and acceptor read first
 #if i_am_writer=true(bob/initiator) write
 #if i_am_writer=false(alice/acceptor) read 
 #write ->read->write->read
@@ -222,10 +222,13 @@ try:
                     buf += chunk
                 msg_type, headers = parse_message(buf.decode())
                 incoming_peer_id = headers.get("clientID", addr[0])
+
                 print(f"Incoming chat request from {incoming_peer_id} "
-                      f"{addr[0]}:{addr[1]}")
-                 #10 alice read first
-                do_chat(conn, i_am_writer=False) 
+                    f"{addr[0]}:{addr[1]}")
+
+                if msg_type == "CHAT":
+                    conn.sendall(b"CHATACK\r\n\r\n")
+                    do_chat(conn, i_am_writer=False)
                 close_all()
                 sys.exit(0)
             if sys.stdin in readable:
@@ -287,7 +290,13 @@ try:
                                      f"clientID: {client_id}\r\n"
                                      f"\r\n")
                         chat_sock.sendall(chat_msg.encode())
-                        do_chat(chat_sock, i_am_writer=True) #bob write first
+
+                        ack = chat_sock.recv(4096).decode()
+
+                        if ack.startswith("CHATACK"):
+                            do_chat(chat_sock, i_am_writer=True)
+                        else:
+                            print("Invalid CHATACK from peer")
                     except socket.error as e:
                         print(f"Socket error initiating chat: {e}", file=sys.stderr)
                     close_all()

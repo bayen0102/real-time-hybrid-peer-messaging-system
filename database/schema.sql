@@ -1,13 +1,13 @@
-CREATE TABLE IF NOT EXISTS clients(
-    client_id TEXT PRIMARY KEY,
-    ip TEXT,
-    port TEXT
+CREATE TABLE IF NOT EXISTS clients (
+    client_id VARCHAR(100) PRIMARY KEY,
+    ip VARCHAR(45) NOT NULL,
+    port INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS Messages(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sender TEXT,
-    receiver TEXT,
-    message TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    sender VARCHAR(100) NOT NULL,
+    receiver VARCHAR(100),
+    message TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

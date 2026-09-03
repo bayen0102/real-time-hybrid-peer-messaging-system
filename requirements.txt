@@ -1,2 +1,10 @@
 # No external dependencies required.
 # Uses Python standard library only.
+
+fastapi
+uvicorn
+psycopg[binary]
+redis
+python-dotenv
+pytest
+httpx

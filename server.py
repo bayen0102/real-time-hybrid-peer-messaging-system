@@ -11,14 +11,10 @@ import sys
 import signal
 import argparse
 import select
+from database import register_client, save_message
+from redis_client import set_user_online
+from logger import log_event
 
-#add SQLite3 for database
-import sqlite3
-db = sqlite3.connect('chat.db')
-cursor = db.cursor()
-with open("database/schema.sql", "r") as f:
-    db.executescript(f.read())
-db.commit()
 #---------------#
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, required=True)
@@ -40,7 +36,11 @@ except socket.error as e:
     print(f"bind error: {e}", file=sys.stderr)
     sys.exit(1)
 srv.listen(5) #讓 server 開始 等待 incoming connection5是 backlog queue size
-print(f"Server listening on {host}:{port}")
+log_event(
+    "server_started",
+    host=host,
+    port=port
+)
 
 
 # handle ctrl c to close gracefully
@@ -80,15 +80,18 @@ while True:
                 cid = hdrs['clientID']
                 cip = hdrs.get('IP', '')
                 cport = hdrs.get('Port', '')
-                #SQL
-                cursor.execute("""
-                INSERT OR REPLACE INTO clients(client_id, ip, port) VALUES (?, ?, ?)
-                """, (cid, cip, cport))
-                db.commit()
+                register_client(cid, cip, cport) # save it to database
+                set_user_online(cid) # set user online in redisclient_info[cid] = (cip, cport) # save it 把 client 存進 server database。
 
                 client_info[cid] = (cip, cport) # save it 把 client 存進 server database。
-                print(f"REGISTER: {cid} from {cip}:{cport}")
-                #5.send response(ues sendall)
+
+                log_event(
+                    "client_registered",
+                    client_id=cid,
+                    ip=cip,
+                    port=int(cport)
+                )
+                                #5.send response(ues sendall)
                 # send REGACK back
                 resp = (f"REGACK\r\n"
                         f"clientID: {cid}\r\n"
@@ -116,9 +119,18 @@ while True:
                 else:
                     w_info = who
                 if peer_name:
-                    print("BRIDGE: " + w_info + " " + peer_name + " " + peer_ip + ":" + peer_port)
+                    log_event(
+                        "peer_bridge_created",
+                        client_id=who,
+                        peer_id=peer_name,
+                        peer_ip=peer_ip,
+                        peer_port=int(peer_port)
+                    )
                 else:
-                    print("BRIDGE: " + w_info)
+                    log_event(
+                        "peer_bridge_failed",
+                        client_id=who
+                    )
 
                 # send back peer info
                 resp = f"BRIDGEACK\r\n"
@@ -133,12 +145,13 @@ while True:
                 sender = hdrs.get("sender", "")
                 receiver = hdrs.get("receiver", "")
                 message = hdrs.get("message", "")
-                cursor.execute("""
-                INSERT INTO Messages (sender, receiver, message)  
-                VALUES (?, ?, ?)
-                """, (sender, receiver, message))
-
-                db.commit()
+                save_message(sender, receiver, message) # save it to database
+                log_event(
+                    "message_saved",
+                    sender=sender,
+                    receiver=receiver,
+                    message_length=len(message)
+                )
             else:
                 # not a valid request type :not register or bridge
                 print("Malformed incoming message", file=sys.stderr)

@@ -1,0 +1,58 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: messaging-postgres
+    environment:
+      POSTGRES_USER: bay
+      POSTGRES_PASSWORD: bayproject
+      POSTGRES_DB: messaging_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  redis:
+    image: redis:7
+    container_name: messaging-redis-compose
+    ports:
+      - "6380:6379"
+
+  api:
+    build: .
+    container_name: messaging-api
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: messaging_db
+      DB_USER: bay
+      DB_PASSWORD: bayproject
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+  tcp-server:
+    build: .
+    container_name: messaging-tcp-server
+    command: ["python", "server.py", "--port=5555"]
+    ports:
+      - "5555:5555"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: messaging_db
+      DB_USER: bay
+      DB_PASSWORD: bayproject
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:
