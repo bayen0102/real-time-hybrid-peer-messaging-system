@@ -329,7 +329,7 @@ pytest -v
 
 ### GitHub Actions CI
 
-![GitHub Actions CI](screenshots/ci-success.png)
+![GitHub Actions CI](screenshots/CI-success.png)
 
 ---
 
