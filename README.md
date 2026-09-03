@@ -2,40 +2,75 @@
 
 ## Overview
 
-This project implements a hybrid real-time messaging architecture combining peer-to-peer communication with centralized peer coordination.
+This project is a production-style distributed backend system built around a hybrid peer-to-peer messaging architecture.
 
-The system supports:
+A centralized TCP coordination service handles client registration and peer discovery, while clients establish persistent peer-to-peer TCP connections for real-time messaging. The original messaging system was extended with PostgreSQL for persistent storage, Redis for user presence, FastAPI for management and analytics APIs, structured JSON logging, automated testing with pytest, Docker-based service orchestration, and GitHub Actions CI.
 
-- Real-time TCP messaging
-- Persistent message storage
-- SQLite-based analytics logging
-- Concurrent socket I/O handling
-- Dynamic client registration
-- Basic messaging analytics
+The system demonstrates:
+
+- Real-time peer-to-peer TCP messaging
+- Centralized client registration and peer discovery
+- PostgreSQL-backed message persistence
+- Redis-based user presence management
+- REST API access through FastAPI
+- Message analytics and aggregation
+- Structured JSON event logging
+- Automated testing with pytest
+- Multi-service orchestration with Docker Compose
+- Continuous integration with GitHub Actions
 
 ---
+
 ## Key Networking Concepts
 
-- TCP persistent connections
+- Persistent TCP connections
 - Peer-to-peer communication
 - Client-server coordination
 - Application-layer protocol design
-- Concurrent socket I/O using select()
+- Concurrent socket I/O using `select()`
 - Reliable message persistence
+
+---
 
 ## Architecture
 
 ```text
-                REGISTER / BRIDGE
-Client A  ─────────────────────────▶  Central Coordination Server
-   ▲                                         │
-   │                                         │ Peer Discovery
-   │                                         ▼
-   └──── Persistent Peer-to-Peer TCP ──── Client B
-                         │
-                         ▼
-               SQLite Message Logging
+                         ┌──────────────────────┐
+                         │   TCP Coordination   │
+                         │        Server        │
+                         │      Port 5555       │
+                         └──────────┬───────────┘
+                                    │
+                    REGISTER / BRIDGE / LOG
+                                    │
+             ┌──────────────────────┴──────────────────────┐
+             │                                             │
+        ┌────▼─────┐                                 ┌─────▼────┐
+        │ Client A │◄──── Persistent P2P TCP ───────►│ Client B │
+        └──────────┘                                 └──────────┘
+                                    │
+                                    │ LOG
+                                    ▼
+                         ┌──────────────────────┐
+                         │     PostgreSQL       │
+                         │ Clients / Messages   │
+                         └──────────┬───────────┘
+                                    │
+                         ┌──────────▼───────────┐
+                         │       FastAPI        │
+                         │ Management /         │
+                         │ Analytics API        │
+                         └──────────────────────┘
+
+                         ┌──────────────────────┐
+                         │        Redis         │
+                         │    User Presence     │
+                         └──────────────────────┘
 ```
+
+Backend services are containerized and orchestrated using Docker Compose.
+
+---
 
 ## Client State Machine
 
@@ -53,29 +88,55 @@ CHAT
   ├── LOG messages
   └── /quit
 ```
+
 ---
 
 ## Technologies
 
+### Backend
+
 - Python
+- FastAPI
 - TCP Socket Programming
-- SQLite
-- I/O Multiplexing using select()
-- Client-Server Networking
+- Custom Application-Layer Protocol
+
+### Data
+
+- PostgreSQL
+- Redis
+
+### Networking
+
+- Peer-to-Peer TCP Communication
+- I/O Multiplexing with `select()`
+- Client-Server Coordination
+
+### Testing & Infrastructure
+
+- pytest
+- Docker
+- Docker Compose
+- GitHub Actions
 
 ---
 
 ## Features
 
-
 - Persistent peer-to-peer TCP communication
-- Centralized peer discovery and registration
-- Concurrent socket monitoring using select()
-- SQLite-based message persistence
-- Graceful client shutdown handling
-- Analytics-ready message logging
+- Centralized peer registration and discovery
+- Concurrent socket monitoring using `select()`
+- PostgreSQL-backed client and message persistence
+- Redis-based user presence tracking
+- FastAPI management and analytics endpoints
+- Message history retrieval through REST APIs
+- Messages-per-hour analytics
+- Structured JSON event logging
+- Automated API and Redis testing with pytest
+- Containerized PostgreSQL, Redis, API, and TCP services
+- Automated CI testing with GitHub Actions
 
 ---
+
 ## Application Protocol
 
 The system implements a custom text-based application protocol supporting:
@@ -88,17 +149,169 @@ LOG
 QUIT
 ```
 
-Each protocol message terminates with CRLF-based headers over TCP streams.
+Each protocol message uses CRLF-based headers over TCP streams.
 
-## Future Improvements
+---
 
-- Multi-peer group chat
-- WebSocket-based communication
-- NAT traversal support
-- End-to-end encryption
-- Distributed peer discovery
+## REST API
 
-This project was developed to explore distributed systems concepts, peer-to-peer networking, and reliable real-time communication architectures.
+The FastAPI management service exposes persisted messaging data and analytics through HTTP endpoints.
+
+### Health Check
+
+```http
+GET /
+```
+
+Returns the status of the management API.
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "service": "Messaging Management API"
+}
+```
+
+### Message History
+
+```http
+GET /messages
+```
+
+Returns persisted message history from PostgreSQL.
+
+Example:
+
+```json
+[
+  {
+    "id": 5,
+    "sender": "bay",
+    "receiver": "Bryan",
+    "message": "database-test-1",
+    "timestamp": "2026-09-03T00:30:36.503957"
+  }
+]
+```
+
+### Messages Per Hour
+
+```http
+GET /analytics/messages-per-hour
+```
+
+Aggregates stored messages by hour.
+
+Example:
+
+```json
+[
+  {
+    "hour": "2026-09-03T00:00:00",
+    "message_count": 5
+  }
+]
+```
+
+---
+
+## Testing and Continuous Integration
+
+The project uses pytest for automated backend testing, including:
+
+- API health checks
+- Message history retrieval
+- Message analytics
+- Redis user presence
+
+GitHub Actions automatically runs the test suite on pushes and pull requests.
+
+The CI environment:
+
+1. Starts PostgreSQL and Redis service containers
+2. Initializes the PostgreSQL schema
+3. Installs Python dependencies
+4. Runs the pytest test suite
+
+This ensures backend changes are automatically validated before integration.
+
+---
+
+## Running the System
+
+### Start Backend Services
+
+```bash
+docker compose up --build
+```
+
+Docker Compose starts:
+
+- TCP coordination server on port `5555`
+- FastAPI management service on port `8000`
+- PostgreSQL
+- Redis
+
+To run the services in the background:
+
+```bash
+docker compose up -d
+```
+
+### Start Client A
+
+```bash
+python3 client.py --id=Alice --port=3000 --server=127.0.0.1:5555
+```
+
+Register the client and begin waiting for a peer:
+
+```text
+/register
+/bridge
+```
+
+### Start Client B
+
+```bash
+python3 client.py --id=Bob --port=4000 --server=127.0.0.1:5555
+```
+
+Register and discover the waiting peer:
+
+```text
+/register
+/bridge
+/chat
+```
+
+After peer discovery through the coordination server, the clients establish a direct persistent TCP connection for real-time messaging.
+
+---
+
+## API Examples
+
+Retrieve stored messages:
+
+```bash
+curl http://localhost:8000/messages
+```
+
+Retrieve messages-per-hour analytics:
+
+```bash
+curl http://localhost:8000/analytics/messages-per-hour
+```
+
+Run the automated test suite:
+
+```bash
+pytest -v
+```
+
+---
 
 ## Demo
 
@@ -110,28 +323,23 @@ This project was developed to explore distributed systems concepts, peer-to-peer
 
 ![Server Log](screenshots/server-log.png)
 
-### SQLite Analytics
+### PostgreSQL Message Persistence
 
-![Analytics](screenshots/analytics-query.png)
+![PostgreSQL Message Persistence](screenshots/database-table.png)
 
-## Running the System
+### Message Analytics
 
-### Start Server
+![Message Analytics](screenshots/analytics-query.png)
 
-```bash
-python3 server.py --port=5555
-```
+---
 
-### Start Client A
+## Future Improvements
 
-```bash
-python3 client.py --id='Alice' --port=3000 --server='127.0.0.1:5555'
-```
-
-### Start Client B
-
-```bash
-python3 client.py --id='Bob' --port=4000 --server='127.0.0.1:5555'
-```
-
-After peer discovery through the coordination server, clients establish direct peer-to-peer TCP communication channels for real-time messaging.
+- AWS cloud deployment
+- WebSocket-based web clients
+- Multi-peer group messaging
+- NAT traversal for peers across different networks
+- End-to-end message encryption
+- Authentication and authorization
+- Improved Redis presence management with heartbeat-based expiration
+- Distributed peer discovery
