@@ -315,21 +315,21 @@ pytest -v
 
 ## Demo
 
-### Client Chat
+### Peer-to-Peer Messaging
 
-![Chat Demo](screenshots/chat-demo.png)
-
-### Server Logging
-
-![Server Log](screenshots/server-log.png)
+![Peer-to-Peer Messaging](screenshots/chat-demo.png)
 
 ### PostgreSQL Message Persistence
 
 ![PostgreSQL Message Persistence](screenshots/database-table.png)
 
-### Message Analytics
+### FastAPI Message Analytics
 
-![Message Analytics](screenshots/analytics-query.png)
+![FastAPI Message Analytics](screenshots/analytics-query.png)
+
+### GitHub Actions CI
+
+![GitHub Actions CI](screenshots/ci-success.png)
 
 ---
 
