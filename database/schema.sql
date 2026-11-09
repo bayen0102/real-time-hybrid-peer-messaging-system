@@ -11,3 +11,4 @@ CREATE TABLE IF NOT EXISTS messages (
     message TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);

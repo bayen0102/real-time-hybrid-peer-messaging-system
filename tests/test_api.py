@@ -46,3 +46,12 @@ def test_messages_per_hour():
         assert "hour" in row
         assert "message_count" in row
         assert isinstance(row["message_count"], int)
+
+def test_messages_per_hour_with_hours_filter():
+    response = client.get("/analytics/messages-per-hour?hours=24")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+def test_messages_per_hour_rejects_invalid_hours():
+    response = client.get("/analytics/messages-per-hour?hours=0")
+    assert response.status_code == 422

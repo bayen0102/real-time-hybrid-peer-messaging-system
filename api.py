@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from typing import Optional
+from fastapi import FastAPI, Query
 from database import (
     get_clients,
     get_messages,
@@ -33,8 +34,8 @@ def messages_by_user(user_id: str):
     return get_messages_by_user(user_id)
 
 @app.get("/analytics/messages-per-hour")
-def messages_per_hour():
-    return get_messages_per_hour()
+def messages_per_hour(hours: Optional[int] = Query(default=None, ge=1)):
+    return get_messages_per_hour(hours)
 
 @app.get("/presence/{user_id}")
 def user_presence(user_id: str):

@@ -125,19 +125,30 @@ def get_messages_by_user(user_id):
     finally:
         db.close()
 
-def get_messages_per_hour():
+def get_messages_per_hour(hours=None):
     db = connect_db()
 
     try:
         with db.cursor() as cursor:
-            cursor.execute("""
-                SELECT
-                    DATE_TRUNC('hour', timestamp) AS hour,
-                    COUNT(*) AS message_count
-                FROM messages
-                GROUP BY hour
-                ORDER BY hour
-            """)
+            if hours is None:
+                cursor.execute("""
+                    SELECT
+                        DATE_TRUNC('hour', timestamp) AS hour,
+                        COUNT(*) AS message_count
+                    FROM messages
+                    GROUP BY hour
+                    ORDER BY hour
+                """)
+            else:
+                cursor.execute("""
+                    SELECT
+                        DATE_TRUNC('hour', timestamp) AS hour,
+                        COUNT(*) AS message_count
+                    FROM messages
+                    WHERE timestamp >= NOW() - make_interval(hours => %s::int)
+                    GROUP BY hour
+                    ORDER BY hour
+                """, (hours,))
 
             rows = cursor.fetchall()
 
