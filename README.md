@@ -2,9 +2,9 @@
 
 ## Overview
 
-This project is a production-style distributed backend system built around a hybrid peer-to-peer messaging architecture.
+This project is a multi-service backend system built around a hybrid peer-to-peer messaging architecture.
 
-A centralized TCP coordination service handles client registration and peer discovery, while clients establish persistent peer-to-peer TCP connections for real-time messaging. The original messaging system was extended with PostgreSQL for persistent storage, Redis for user presence, FastAPI for management and analytics APIs, structured JSON logging, automated testing with pytest, Docker-based service orchestration, and GitHub Actions CI.
+A centralized TCP coordination service handles client registration and peer discovery, while clients establish persistent peer-to-peer TCP connections for real-time messaging. The original SQLite-based messaging prototype was extended with PostgreSQL for persistent storage, Redis for user presence, FastAPI for management and analytics APIs, structured JSON logging, automated testing with pytest, Docker-based service orchestration, and GitHub Actions CI.
 
 The system demonstrates:
 
@@ -12,12 +12,13 @@ The system demonstrates:
 - Centralized client registration and peer discovery
 - PostgreSQL-backed message persistence
 - Redis-based user presence management
-- REST API access through FastAPI
-- Message analytics and aggregation
+- EST API access through FastAPI (6 endpoints)
+- Message analytics and aggregation, with a timestamp index and a time-window filter
 - Structured JSON event logging
 - Automated testing with pytest
 - Multi-service orchestration with Docker Compose
 - Continuous integration with GitHub Actions
+- A reproducible local benchmark for the analytics query
 
 ---
 
@@ -28,7 +29,7 @@ The system demonstrates:
 - Client-server coordination
 - Application-layer protocol design
 - Concurrent socket I/O using `select()`
-- Reliable message persistence
+- Message persistence
 
 ---
 
@@ -67,7 +68,7 @@ The system demonstrates:
                          │    User Presence     │
                          └──────────────────────┘
 ```
-
+Redis stores user presence, which the FastAPI service reads through `/presence/{user_id}`.
 Backend services are containerized and orchestrated using Docker Compose.
 
 ---
@@ -129,11 +130,13 @@ CHAT
 - Redis-based user presence tracking
 - FastAPI management and analytics endpoints
 - Message history retrieval through REST APIs
-- Messages-per-hour analytics
+- Messages-per-hour analytics with an optional recent-window filter
 - Structured JSON event logging
 - Automated API and Redis testing with pytest
 - Containerized PostgreSQL, Redis, API, and TCP services
 - Automated CI testing with GitHub Actions
+- Timestamp index on messages for time-range queries
+- Reproducible local benchmark scripts
 
 ---
 
@@ -155,7 +158,16 @@ Each protocol message uses CRLF-based headers over TCP streams.
 
 ## REST API
 
-The FastAPI management service exposes persisted messaging data and analytics through HTTP endpoints.
+The FastAPI management service exposes persisted messaging data, presence, and analytics through HTTP endpoints.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | API health/status |
+| GET | `/users` | Registered clients (id, IP, port) |
+| GET | `/messages` | Full persisted message history |
+| GET | `/messages/{user_id}` | Messages sent or received by one user |
+| GET | `/analytics/messages-per-hour` | Message counts aggregated by hour (optional `hours` filter) |
+| GET | `/presence/{user_id}` | Presence status of a user, read from Redis |
 
 ### Health Check
 
@@ -178,53 +190,44 @@ Example response:
 
 ```http
 GET /messages
+GET /messages/{user_id}
 ```
 
-Returns persisted message history from PostgreSQL.
-
-Example:
-
-```json
-[
-  {
-    "id": 5,
-    "sender": "bay",
-    "receiver": "Bryan",
-    "message": "database-test-1",
-    "timestamp": "2026-09-03T00:30:36.503957"
-  }
-]
-```
+Returns persisted message history from PostgreSQL. The second form returns only messages where the user is the sender or the receiver.
 
 ### Messages Per Hour
 
 ```http
 GET /analytics/messages-per-hour
+GET /analytics/messages-per-hour?hours=24
 ```
 
-Aggregates stored messages by hour.
+Aggregates stored messages by hour. The optional `hours` parameter (an integer of at least 1) limits the result to the most recent N hours, which lets the query use the timestamp index.
 
-Example:
+### Users
 
-```json
-[
-  {
-    "hour": "2026-09-03T00:00:00",
-    "message_count": 5
-  }
-]
+```http
+GET /users
 ```
 
+Returns registered clients (client id, IP, and port).
+
+### Presence
+
+```http
+GET /presence/{user_id}
+```
+
+Returns the presence status of a user, read from Redis.
 ---
 
 ## Testing and Continuous Integration
 
-The project uses pytest for automated backend testing, including:
+The project uses pytest for automated backend testing. The suite has 6 tests and reaches 91% coverage on api.pyandredis_client.py (measured locally). It covers:
 
 - API health checks
 - Message history retrieval
-- Message analytics
-- Redis user presence
+- Message analytics, including the hours filter- Redis user presence
 
 GitHub Actions automatically runs the test suite on pushes and pull requests.
 
@@ -247,27 +250,30 @@ Local benchmark of the hourly aggregation query and the `GET /analytics/messages
 ```bash
 pip install -r requirements.txt
 docker compose up --build -d
-python scripts/seed_messages.py     # insert 100K synthetic messages
-python scripts/benchmark.py         # run the benchmark and print a results table
+python scripts/seed_messages.py           # insert 100K synthetic messages
+python scripts/benchmark.py               # run the benchmark and print a results table
 python scripts/seed_messages.py --clean   # remove the synthetic messages
 ```
 
-The scripts connect to PostgreSQL as exposed by `compose.yaml` on the host (`localhost:5434`, database `messaging_db`). Override with the `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` and `API_URL` environment variables.
+The scripts connect to PostgreSQL as exposed by `compose.yaml` on the host (`localhost:5434`, database `messaging_db`). Override with the `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `API_URL` environment variables.
 
 ### What is measured
 
 - The SQL behind `get_messages_per_hour(hours=24)`, run directly against PostgreSQL (messages grouped by hour over the last 24 hours).
-- The `/analytics/messages-per-hour?hours=24` endpoint, measured end to end over HTTP.
+- The `/analytics/messages-per-hour` endpoint, measured end to end over HTTP, with and without the `hours` filter.
 - Each figure is the median of 200 runs after 20 warm-up runs, with the index dropped and then recreated. The script restores the index when it finishes.
 
 ### Results (local, 100K synthetic messages spread over 30 days)
 
 | Measurement | Without index | With index |
 |---|---|---|
-| Time-range aggregation query | 13.8 ms | 3.7 ms |
-| `GET /analytics/messages-per-hour?hours=24` (median) | ~12.5 ms | ~7.4 ms |
+| Time-range aggregation query (SQL, last 24 h) | 5.7 ms | 1.0 ms |
+| `GET /analytics/messages-per-hour?hours=24` (median) | 10.4 ms | 5.7 ms |
+| `GET /analytics/messages-per-hour` (no filter, full table) | 19.6 ms | 20.5 ms |
 
-Figures come from one local machine running Docker Compose and will vary with hardware and data distribution.
+Without the `hours` filter the query scans the whole table, so the index does not help. Figures come from one local machine running Docker Compose and will vary with hardware and data distribution.
+
+---
 
 ## Running the System
 
@@ -281,8 +287,8 @@ Docker Compose starts:
 
 - TCP coordination server on port `5555`
 - FastAPI management service on port `8000`
-- PostgreSQL
-- Redis
+- PostgreSQL (host port 5434)
+- Redis (host port 6380)
 
 To run the services in the background:
 
@@ -329,10 +335,11 @@ Retrieve stored messages:
 curl http://localhost:8000/messages
 ```
 
-Retrieve messages-per-hour analytics:
+Retrieve messages-per-hour analytics for all time, or for the last 24 hours:
 
 ```bash
 curl http://localhost:8000/analytics/messages-per-hour
+curl "http://localhost:8000/analytics/messages-per-hour?hours=24"
 ```
 
 Run the automated test suite:
