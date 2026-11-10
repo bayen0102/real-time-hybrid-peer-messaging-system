@@ -238,6 +238,36 @@ The CI environment:
 This ensures backend changes are automatically validated before integration.
 
 ---
+## Benchmark
+
+Local benchmark of the hourly aggregation query and the `GET /analytics/messages-per-hour?hours=24` endpoint, with and without the timestamp index (`idx_messages_timestamp`, defined in `database/schema.sql`).
+
+### Setup
+
+```bash
+pip install -r requirements.txt
+docker compose up --build -d
+python scripts/seed_messages.py     # insert 100K synthetic messages
+python scripts/benchmark.py         # run the benchmark and print a results table
+python scripts/seed_messages.py --clean   # remove the synthetic messages
+```
+
+The scripts connect to PostgreSQL as exposed by `compose.yaml` on the host (`localhost:5434`, database `messaging_db`). Override with the `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` and `API_URL` environment variables.
+
+### What is measured
+
+- The SQL behind `get_messages_per_hour(hours=24)`, run directly against PostgreSQL (messages grouped by hour over the last 24 hours).
+- The `/analytics/messages-per-hour?hours=24` endpoint, measured end to end over HTTP.
+- Each figure is the median of 200 runs after 20 warm-up runs, with the index dropped and then recreated. The script restores the index when it finishes.
+
+### Results (local, 100K synthetic messages spread over 30 days)
+
+| Measurement | Without index | With index |
+|---|---|---|
+| Time-range aggregation query | 13.8 ms | 3.7 ms |
+| `GET /analytics/messages-per-hour?hours=24` (median) | ~12.5 ms | ~7.4 ms |
+
+Figures come from one local machine running Docker Compose and will vary with hardware and data distribution.
 
 ## Running the System
 
