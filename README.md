@@ -36,37 +36,36 @@ The system demonstrates:
 ## Architecture
 
 ```text
-                         ┌──────────────────────┐
-                         │   TCP Coordination   │
-                         │        Server        │
-                         │      Port 5555       │
-                         └──────────┬───────────┘
-                                    │
-                    REGISTER / BRIDGE / LOG
-                                    │
-             ┌──────────────────────┴──────────────────────┐
-             │                                             │
-        ┌────▼─────┐                                 ┌─────▼────┐
-        │ Client A │◄──── Persistent P2P TCP ───────►│ Client B │
-        └──────────┘                                 └──────────┘
-                                    │
-                                    │ LOG
-                                    ▼
-                         ┌──────────────────────┐
-                         │     PostgreSQL       │
-                         │ Clients / Messages   │
-                         └──────────┬───────────┘
-                                    │
-                         ┌──────────▼───────────┐
-                         │       FastAPI        │
-                         │ Management /         │
-                         │ Analytics API        │
-                         └──────────────────────┘
+```text
+┌──────────────────────┐                                ┌──────────────────────┐
+│       Client A       │◄───── Persistent P2P TCP ─────►│       Client B       │
+│  Alice (port 3000)   │                                │   Bob (port 4000)    │
+└──────────┬───────────┘             (CHAT)             └───────────┬──────────┘
+           │                 REGISTER / BRIDGE / LOG                │
+           └──────────────────┐                    ┌────────────────┘
+                              ▼                    ▼
+                      ┌────────────────────────────────────┐
+                      │  TCP Coordination Server (:5555)   │
+                      │  select() + custom text protocol   │
+                      │   REGISTER BRIDGE CHAT LOG QUIT    │
+                      └───────┬────────────────────┬───────┘
+                              │                    │
+               ┌──────────────┘                    └───────────────┐
+               ▼ save clients & messages          set user online  ▼
+  ┌────────────────────────┐                          ┌────────────────────────┐
+  │       PostgreSQL       │                          │         Redis          │
+  │   clients · messages   │                          │     user presence      │
+  └────────────┬───────────┘                          └────────────┬───────────┘
+               │ query                                   presence  │
+               └──────────────┐                    ┌───────────────┘
+                              ▼                    ▼
+                      ┌────────────────────────────────────┐
+                      │ FastAPI Management / Analytics API │
+                      │      6 REST endpoints (:8000)      │
+                      └────────────────────────────────────┘
 
-                         ┌──────────────────────┐
-                         │        Redis         │
-                         │    User Presence     │
-                         └──────────────────────┘
+Docker Compose runs: TCP server, FastAPI, PostgreSQL, Redis. Clients run locally.
+```
 ```
 Redis stores user presence, which the FastAPI service reads through `/presence/{user_id}`.
 Backend services are containerized and orchestrated using Docker Compose.
